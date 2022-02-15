@@ -3,7 +3,7 @@
 Encoder + Decoder for ADPCM EA-XA codecs.
 
 **Opportunities:**
-- encoding/decoding ADPCM EA-XAS
+- encoding/decoding ADPCM EA-XAS: present in EA games since ~2006: in NFS from Carbon to ?, Sims 3 (4?), Red Alert 3, ...
 
 **TODO:**
 - Reduce losses
