@@ -125,47 +125,42 @@ void decode_XAS_Chunk(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
     vec128 head = *(vec128*)&in_chunk->headers;
 	static const int32_t const_shift[4] = { 12 + fixed_point_offset, 12 + fixed_point_offset , 12 + fixed_point_offset , 12 + fixed_point_offset };
 
-	int32x4_t rounding;
-    rounding = rounding.GetOnes128().SIMD_cast<int32x4_t>();
+	uint32x4_t rounding = { GetOnes128() };
 
-	int32x4_t nibble_mask = rounding >> 28;
+	uint32x4_t nibble_mask = rounding.SIMD_reinterpret_cast<uint32x4_t>() >> 28;
 
-	rounding = rounding >> 31 << (fixed_point_offset - 1);
+	rounding = (rounding >> 31 << (fixed_point_offset - 1)).SIMD_reinterpret_cast<uint32x4_t>();
 
-	int16x8_t samples = head.SIMD_cast<int16x8_t>();
+	int16x8_t samples = head.SIMD_reinterpret_cast<int16x8_t>();
 	samples = samples >> 4 << 4;
 
 	int32x4_t shift = { head };
 	shift = *(int32x4_t*)const_shift - (shift << 12 >> 28);
 	int32x4_t coef_index = { head & nibble_mask };
-	int16x8_t coefs = LoadByIndex(coef_index, (int*)ea_adpcm_table_v2).SIMD_cast<int16x8_t>();
+	int16x8_t coefs = LoadByIndex(coef_index, (int *) ea_adpcm_table_v2).SIMD_reinterpret_cast<int16x8_t>();
 
-    SaveWithStep(samples.SIMD_cast<int32x4_t>(), (int32_t*)out_PCM, 16);
+    SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int32_t*)out_PCM, 16);
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 15; i++) {
 
-		int32x4_t data = *(int32x4_t*)&in_chunk->XAS_data[0][i*16];
+        int32x4_t data = (int32x4_t)*(uint8x16_t*)&in_chunk->XAS_data[0][i*4];
 
-		int iters = 8 - ((i + 1) >> 2 << 1); // i != 3 ? 8 : 6;
+        for (int k = 0; k < 2; k++){
+            int32x4_t prediction = mul16_add32(samples, coefs);
+            int32x4_t correction = (data & nibble_mask).SIMD_reinterpret_cast<int32x4_t>() << shift;
 
-		for (int j = 0; j < iters; j++) {
-			int32x4_t prediction = mul16_add32(samples, coefs);
+            int32x4_t predecode = (prediction + correction + rounding) >> fixed_point_offset;
 
-			int32x4_t correction = (data & nibble_mask).SIMD_cast<int32x4_t>() << shift;
+            int16x8_t decoded = Clip_int16(predecode);
 
-			int32x4_t predecode = (prediction + correction + rounding) >> fixed_point_offset;
+            // _mm_shufflelo_epi16// also check _mm_mulhrs_epi16
+            // clip, mix
 
-			int16x8_t decoded = Clip_int16(predecode);
+            samples = {(samples.SIMD_reinterpret_cast<int32x4_t>() >> 16) | (int32x4_t)decoded.SIMD_reinterpret_cast<uint16x8_t>() };
 
-            SaveWithStep_low_4(decoded, out_PCM + i*8 + j, 32);
-			// _mm_shufflelo_epi16
-			// also check _mm_mulhrs_epi16
-			// clip, mix
-
-			samples = { ( samples.SIMD_cast<int32x4_t>() >> 16) | _mm_cvtepu16_epi32(decoded.i128) };
-
-			data = data >> 4;
-		}
+            data = data >> 4;
+        }
+        SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int*)(out_PCM + i*2), 16);
 	}
 }
 
