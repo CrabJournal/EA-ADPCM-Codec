@@ -1,0 +1,185 @@
+#include "EA ADPCM codec.h"
+
+float ea_adpcm_table_float[] = {
+	0.0, -0.9375, -1.796875, -1.53125,
+	0.0,     0.0,    0.8125, 0.859375
+};
+
+// fixed point 8.8
+static const int16_t ea_adpcm_table[] = {
+	0,  240,  460,  392,
+	0,    0, -208, -220,
+	0,    1,    3,    4,
+	7,    8,   10,   11,
+	0,   -1,   -3,   -4
+};
+
+// saved it for memories
+void decode_XAS_Chunk_v1(const XAS_Chunk* in_chunk, short* out_PCM) {
+
+	byte shifts[subchunks_in_XAS_chunk];
+	short coef[2][subchunks_in_XAS_chunk];
+	short* pSamples = out_PCM;
+
+	// proc headers
+	for (int i = 0; i < subchunks_in_XAS_chunk; i++, pSamples += samples_in_XAS_per_subchunk) {
+		pSamples[0] = in_chunk->headers[i].sample_0 << 4;
+
+		int coef_index = in_chunk->headers[i].coef_index;
+
+#ifdef _DEBUG
+		if (coef_index >= 4) printf("large coef_index = %d\n", coef_index);
+#endif // _DEBUG
+
+		coef[0][i] = ea_adpcm_table[coef_index];
+		coef[1][i] = ea_adpcm_table[coef_index + 4];
+
+		pSamples[1] = in_chunk->headers[i].sample_1 << 4;
+		shifts[i] = 20 - in_chunk->headers[i].exp_shift;
+	}
+
+	// decode chunck
+	for (int i = 0; i < 15; i++) {
+		pSamples = out_PCM + i * 2;
+		for (int j = 0; j < subchunks_in_XAS_chunk; j++, pSamples += 32) {
+			int level, pred;
+			short prevSample;
+			SamplesByte data = *(SamplesByte*)&(in_chunk->XAS_data[i][j]);
+
+			level = data.sample0 << shifts[j];
+			pred = pSamples[1] * coef[0][j] + pSamples[0] * coef[1][j];
+			pSamples[2] = prevSample = Clip_int16((level + pred + 0x80) >> 8);
+
+			level = data.sample1 << shifts[j];
+			pred = prevSample * coef[0][j] + pSamples[1] * coef[1][j];
+			pSamples[3] = Clip_int16((level + pred + 0x80) >> 8);
+		}
+	}
+}
+
+// from ffmpeg
+void decode_XAS_Chunk_ffmpeg_style(const XAS_Chunk* in_chunk, short* out_PCM) {
+	byte* gb = (byte*)in_chunk;
+	int n, m, i;
+	int coeff[2][4], shift[4];
+	int16_t *s = out_PCM;
+	for (n = 0; n < 4; n++, s += 32) {
+		short val = bytestream2_get_le16s(&gb);
+		for (i = 0; i < 2; i++)
+			coeff[i][n] = ea_adpcm_table[(val & 0x0F) + 4 * i];
+		s[0] = val & ~0x0F;
+
+		val = bytestream2_get_le16s(&gb);
+		shift[n] = 20 - (val & 0x0F);
+		s[1] = val & ~0x0F;
+	}
+
+	for (m = 2; m < 32; m += 2) {
+		s = &out_PCM[m];
+		for (n = 0; n < 4; n++, s += 32) {
+			int level, pred;
+			char c_byte = bytestream2_get_bytes(&gb);
+
+			level = (c_byte >> 4) << shift[n];
+			pred = s[-1] * coeff[0][n] + s[-2] * coeff[1][n];
+			s[0] = Clip_int16((level + pred + 0x80) >> 8);
+
+			level = low_sNibble(c_byte) << shift[n];
+			pred = s[0] * coeff[0][n] + s[-1] * coeff[1][n];
+			s[1] = Clip_int16((level + pred + 0x80) >> 8);
+		}
+	}
+}
+
+// from SX
+// sub_428393
+void encode_EA_XA_R2_SX(int16_t in_PCM[28], byte* encoded_data, int* pPrevSample, int* pPrevPrevSample,
+	double* pdPrevSample, double* pdPrevPrevSample, int mb_codec/*=0xA*/, int allowed_coefs/*=0xF*/) {
+	static float ea_adpcm_table_float[] = {
+		0.0, -0.9375, -1.796875, -1.53125,
+		0.0,     0.0,    0.8125, 0.859375
+	};
+	int max_tr; // var_8
+	int min_tr; // var_4
+	if (mb_codec == 0xA) {
+		max_tr = 0x7530;
+		min_tr = -0x7530;
+	}
+	else {
+		max_tr = 0x77FF;
+		min_tr = -0x7800;
+	}
+	int16_t cliped_PCM[28]; // var_50
+	for (int i = 0; i < 28; i++) {
+		if (in_PCM[i] > max_tr) cliped_PCM[i] = max_tr;
+		else if (in_PCM[i] < min_tr) cliped_PCM[i] = max_tr;
+		cliped_PCM[i] = in_PCM[i];
+	}
+
+	// calc best coeficient index
+	double min_max_error = 1.0e21; // var_18
+	int min_error_coef_ind = mb_codec;
+	int prev_sample;		// var_4
+	int prev_prev_sample;	// var 8
+	// coef 4 never used afaik
+	double max_errors[5];	// var_78
+	double Prediction_errors[5 /* coefs */][28]; // var_4D8, encode samples with different coefs
+	for (int coef_index = 0; coef_index < 5; coef_index++) {
+
+		if (allowed_coefs & (1 << coef_index)) {
+			prev_sample = *pPrevSample;
+			prev_prev_sample = *pPrevPrevSample;
+			max_errors[coef_index] = 0.0;
+			double max_error4coef = 0.0; // calc max error with this coeficients
+			for (int i = 0; i < 28; i++) {
+				double neg_prediction = (double)prev_sample * ea_adpcm_table_float[coef_index] +
+					(double)prev_prev_sample + ea_adpcm_table_float[coef_index + 4]; // sign here is inverted, so it's -prediction
+				double prediction_error = (double)cliped_PCM[i] + neg_prediction; // v17, = cliped_PCM[i] - prediction;
+				Prediction_errors[coef_index][i] = prediction_error;
+
+				double abs_prediction_error = abs(prediction_error);
+				if (abs_prediction_error > max_error4coef)
+					max_error4coef = prediction_error;
+
+				prev_prev_sample = prev_sample;
+				prev_sample = cliped_PCM[i];
+
+			}
+			if (max_error4coef < min_max_error) {
+				min_error_coef_ind = coef_index;
+				min_max_error = max_error4coef;
+			}
+			// why is so strange?
+			if (coef_index == 0 && max_errors[0] <= 7.0) {
+				min_error_coef_ind = 0;
+				break;
+			}
+		}
+	}
+	// calc min exponent
+	int iMaxMinErr = Clip_int16(max_errors[min_error_coef_ind]);
+	int mask = 0x4000; // = 1 << 14
+	int exp_shift;
+	for (exp_shift = 0; exp_shift < 12; exp_shift++) {
+		if ((((mask >> 3) + iMaxMinErr) & mask) != 0) {
+			break;
+		}
+		mask >>= 1;
+	}
+	byte data = (exp_shift << 4) | min_error_coef_ind;
+
+
+	double num_exp = (double)(1 << exp_shift);
+
+	for (int i = 0; i < 28; i++) {
+		double neg_prediction = ea_adpcm_table_float[min_error_coef_ind] * (*pdPrevSample) +
+			ea_adpcm_table_float[min_error_coef_ind] + (*pdPrevPrevSample);
+		int smpl = Prediction_errors[min_error_coef_ind][i] + neg_prediction;
+		smpl += 0x800;
+		smpl &= 0xFFFFF000;
+		smpl = Clip_int16(smpl);
+		smpl >>= 8;
+		// ...
+	}
+
+}

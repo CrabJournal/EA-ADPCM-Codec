@@ -1,0 +1,18 @@
+# IDE
+.vscode/
+.cache/
+.idea/
+
+# results
+*.wav
+*.raw
+*.dat
+*.txt
+!CMakeLists.txt
+!legacy.txt
+
+# build
+Debug/
+Release/
+x64/
+cmake-build-*/
