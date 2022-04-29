@@ -77,6 +77,8 @@ struct XAS_Chunk {
 
 #ifdef _MSC_VER
 
+#include <intrin.h>
+
 #define _memcpy(DST, SRC, _SIZE) __movsb((byte*)DST, (byte*)SRC, _SIZE)
 #define _memset(DST, VAL, _SIZE) __stosb((byte*)DST, (byte)VAL, _SIZE)
 

@@ -8,10 +8,11 @@
 
 #endif // !__SSE2__
 
+#include "stdint.h"
 
 #ifdef __SSE2__
 
-#define __OPTIMIZE__
+// #define __OPTIMIZE__
 
 #include <emmintrin.h>
 #include <immintrin.h>
@@ -71,20 +72,12 @@ struct uint8x16_t : vec128 {
 inline int16x8_t operator<<(int16x8_t a, const int shift_imm8) {
 	return { _mm_slli_epi16(a.i128, shift_imm8) };
 }
-inline int16x8_t operator<<(int16x8_t a, int16x8_t shift) {
-	return { _mm_sll_epi16(a.i128, shift.i128) };
-}
 inline int32x4_t operator<<(int32x4_t a, const int shift_imm8) {
 	return { _mm_slli_epi32(a.i128, shift_imm8) };
 }
-inline int32x4_t operator<<(int32x4_t a, int32x4_t shift) {
-	return { _mm_sll_epi32(a.i128, shift.i128) };
-}
+
 inline int16x8_t operator>>(int16x8_t a, const int shift_imm8) {
 	return { _mm_srli_epi16(a.i128, shift_imm8) };
-}
-inline int16x8_t operator>>(int16x8_t a, int16x8_t shift) {
-	return { _mm_sra_epi16(a.i128, shift.i128) };
 }
 inline int32x4_t operator>>(int32x4_t a, const int shift_imm8) {
 	return { _mm_srai_epi32(a.i128, shift_imm8) };
@@ -92,10 +85,14 @@ inline int32x4_t operator>>(int32x4_t a, const int shift_imm8) {
 inline uint32x4_t operator>>(uint32x4_t a, const int shift_imm8) {
     return { _mm_srli_epi32(a.i128, shift_imm8) };
 }
+
+#ifdef __AVX2__
+
 inline int32x4_t operator>>(int32x4_t a, int32x4_t shift) {
-	return { _mm_sra_epi32(a.i128, shift.i128) };
+	return { _mm_srav_epi32(a.i128, shift.i128) };
 }
 
+#endif
 
 inline int32x4_t operator+(int32x4_t a, int32x4_t b) {
 	return { _mm_add_epi32(a.i128, b.i128) };
@@ -143,10 +140,10 @@ inline void SaveWithStep(int32x4_t vect, int32_t * mem, int step) {
 }
 
 inline void SaveWithStep_low_4(int16x8_t vect, int16_t* mem, int step) {
-    mem[0]      = _mm_extract_epi16(vect.i128, 0);
-    mem[step]   = _mm_extract_epi16(vect.i128, 1);
-    mem[step*2] = _mm_extract_epi16(vect.i128, 2);
-    mem[step*3] = _mm_extract_epi16(vect.i128, 3);
+    *mem = _mm_extract_epi16(vect.i128, 0), mem += step;
+	*mem = _mm_extract_epi16(vect.i128, 1), mem += step;
+	*mem = _mm_extract_epi16(vect.i128, 2), mem += step;
+	*mem = _mm_extract_epi16(vect.i128, 3);
 }
 
-#endif // __SSE__
+#endif // __SSE2__

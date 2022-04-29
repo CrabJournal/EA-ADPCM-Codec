@@ -8,7 +8,7 @@ add_executable(EA_ADPCM_codec
         EA-ADPCM-codec/EA-ADPCM-codec.cpp
         EA-ADPCM-codec/vector_SIMD.h)
 
-target_compile_options(EA_ADPCM_codec PRIVATE -msse4.1)
+target_compile_options(EA_ADPCM_codec PRIVATE -mavx2)
 
 
 SET(TARGET_SRC

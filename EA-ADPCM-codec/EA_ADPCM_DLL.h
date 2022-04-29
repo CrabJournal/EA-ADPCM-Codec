@@ -27,3 +27,11 @@ void CODEC_ABI decode_XAS(const void* in_XAS, int16_t* out_PCM, uint32_t n_sampl
 
 EAADPCMCODEC_API
 void CODEC_ABI encode_XAS(void* out_XAS, const int16_t* in_PCM, uint32_t n_samples_per_channel, uint32_t n_channels);
+
+
+#ifndef BENCH
+
+EAADPCMCODEC_API
+void CODEC_ABI Bench(uint64_t reps);
+
+#endif // !BENCH
