@@ -22,25 +22,29 @@
 struct vec128;
 inline vec128 GetOnes128();
 
+#define _decl _vectorcall
+
+#define inline __forceinline
+
 struct vec128 {
     static vec128 GetZeros128() {
         return { _mm_setzero_si128() };
     }
 
     template <typename T>
-    inline T SIMD_reinterpret_cast(){
+    inline T _decl SIMD_reinterpret_cast(){
         return { i128 };
     }
-    inline vec128 operator&(vec128 b) {
+    inline vec128 _decl operator&(vec128 b) {
         return { _mm_and_si128(i128, b.i128) };
     }
-    inline vec128 operator|(vec128 b) {
+    inline vec128 _decl operator|(vec128 b) {
         return { _mm_or_si128(i128, b.i128) };
     }
-    inline vec128 operator^(vec128 b) {
+    inline vec128 _decl operator^(vec128 b) {
         return { _mm_xor_si128(i128, b.i128) };
     }
-    inline vec128 operator~() {
+    inline vec128 _decl operator~() {
         return { (*this)^GetOnes128() };
     }
 
@@ -63,10 +67,10 @@ struct int32x4_t : vec128 {};
 struct uint32x4_t : int32x4_t {};
 struct int16x8_t : vec128 {};
 struct uint16x8_t : vec128 {
-    inline operator int32x4_t() const { return {_mm_cvtepu16_epi32(i128)}; }
+    inline _decl operator int32x4_t() const { return {_mm_cvtepu16_epi32(i128)}; }
 };
 struct uint8x16_t : vec128 {
-    inline operator int32x4_t() const { return {_mm_cvtepu8_epi32(i128)}; }
+    inline _decl operator int32x4_t () const { return {_mm_cvtepu8_epi32(i128)}; }
 };
 
 inline int16x8_t operator<<(int16x8_t a, const int shift_imm8) {
@@ -147,3 +151,6 @@ inline void SaveWithStep_low_4(int16x8_t vect, int16_t* mem, int step) {
 }
 
 #endif // __SSE2__
+
+
+#undef inline

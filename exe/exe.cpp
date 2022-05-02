@@ -280,6 +280,12 @@ int main() {
         "1"
 	};
 
+#ifdef BENCH
+	Bench(1000);
+	return 0;
+#endif // BENCH
+
+
     // out_f = fopen("p-c-out.txt", "w");
 
     _main_(argv3);

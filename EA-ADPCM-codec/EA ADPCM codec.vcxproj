@@ -103,6 +103,8 @@
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <CallingConvention>VectorCall</CallingConvention>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -159,6 +161,8 @@
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <CallingConvention>VectorCall</CallingConvention>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

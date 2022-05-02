@@ -98,6 +98,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <CallingConvention>VectorCall</CallingConvention>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -156,6 +157,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <CallingConvention>VectorCall</CallingConvention>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

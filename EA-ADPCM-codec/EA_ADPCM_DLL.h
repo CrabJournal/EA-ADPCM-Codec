@@ -10,7 +10,7 @@
 #else
 #define EAADPCMCODEC_API extern "C" __declspec(dllimport)
 #endif
-#define CODEC_ABI __cdecl
+#define CODEC_ABI //__vectorcall
 
 #else // _MSC_VER
 
@@ -28,10 +28,11 @@ void CODEC_ABI decode_XAS(const void* in_XAS, int16_t* out_PCM, uint32_t n_sampl
 EAADPCMCODEC_API
 void CODEC_ABI encode_XAS(void* out_XAS, const int16_t* in_PCM, uint32_t n_samples_per_channel, uint32_t n_channels);
 
+// #define BENCH
 
-#ifndef BENCH
+#ifdef BENCH
 
 EAADPCMCODEC_API
-void CODEC_ABI Bench(uint64_t reps);
+void CODEC_ABI _cdecl Bench(uint32_t reps);
 
 #endif // !BENCH

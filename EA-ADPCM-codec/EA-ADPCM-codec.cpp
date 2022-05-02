@@ -1,11 +1,11 @@
 #include "limits.h"
 
+#include "vector_SIMD.h"
 
 #include "EA ADPCM codec.h"
 #include "EA_ADPCM_DLL.h"
 
 #include <cassert>
-#include "vector_SIMD.h"
 
 #ifdef _DEBUG
 #include <iostream>
@@ -17,8 +17,6 @@
 	EA-XAS: presents in all known decoders (ffmpeg, NFS_abk_decoder(Carbon+))
 */
 const int def_rounding = (fixp_exponent >> 1);
-
-
 
 inline int16_t decode_XA_sample(const int16_t prev_samples[2], const table_type coef[2], char int4, byte shift) {
 	int correction = (int)int4 << shift;
@@ -121,6 +119,8 @@ void decode_XAS_Chunk(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 	}
 }
 
+// #define decode_XAS_Chunk decode_XAS_Chunk_SIMD
+
 void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
     vec128 head = *(vec128*)&in_chunk->headers;
 	static const table_type ea_adpcm_table_v3[][2] = {
@@ -185,7 +185,7 @@ void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 void PrintRes(const char* mes, uint64_t time, uint64_t reps) {
 	printf("%s: total = %llu, per chunk = %f \n", mes, time, (double)time / reps);
 }
-void Bench(uint64_t reps) {
+void _cdecl Bench(uint32_t reps) {
 	XAS_Chunk in_chunk;
 	int16_t PCM[128];
 	uint64_t start = __rdtsc();

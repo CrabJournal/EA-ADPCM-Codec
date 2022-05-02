@@ -90,10 +90,10 @@ struct XAS_Chunk {
 #endif
 
 
-inline short Get_s16be(const void* ptr) {
+inline int16_t Get_s16be(const void* ptr) {
 	return (short)_byteswap_ushort(*(unsigned short*)ptr);
 }
-inline short bytestream2_get_le16s(byte** ptr) {
+inline int16_t bytestream2_get_le16s(byte** ptr) {
 	short val = **(short**)ptr;
 	*ptr += 2;
 	return val;
@@ -106,10 +106,12 @@ inline char bytestream2_get_bytes(byte** ptr) {
 inline char low_sNibble(char _byte) {
 	return (char)((byte)_byte << 4) >> 4;
 }
-inline short Clip_int16(int val) {
-	if (val >= 0x7FFF) return 0x7FFF;
-	if (val <= -0x8000) return -0x8000;
-	return (short)val;
+inline int16_t Clip_int16(int val) {
+#ifdef __SSE2__
+	return _mm_cvtsi128_si32(_mm_packs_epi32(_mm_cvtsi32_si128(val), _mm_undefined_si128()));
+#else
+	return (val >= 0x7FFF) ? 0x7FFF : (val <= -0x8000) ? -0x8000 : val;
+#endif // __SSE2__
 }
 inline char Clip_int4(char val) {
 	if (val >= 7) return 7;
