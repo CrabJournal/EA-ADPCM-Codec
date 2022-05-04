@@ -119,8 +119,6 @@ void decode_XAS_Chunk(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 	}
 }
 
-// #define decode_XAS_Chunk decode_XAS_Chunk_SIMD
-
 void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
     vec128 head = *(vec128*)&in_chunk->headers;
 	static const table_type ea_adpcm_table_v3[][2] = {
@@ -130,6 +128,7 @@ void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 		{(table_type)(-0.859375*fixp_exponent), (table_type)(1.531250*fixp_exponent)},
 	};
 	static const int32_t const_shift[4] = {16 - fixed_point_offset, 16 - fixed_point_offset , 16 - fixed_point_offset , 16 - fixed_point_offset };
+	static const uint8_t shuffle[16] = {12, 8, 4, 0,   13, 9, 5, 1,   14, 10, 6, 2,    15, 11, 7, 3};
 
 	uint32x4_t rounding = { GetOnes128() };
 
@@ -148,26 +147,31 @@ void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 
     SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int32_t*)out_PCM, 16);
 
-	for (int i = 0; i < 15; i++) {
+	vec128 _shuffle = *(vec128*)shuffle;
 
-        int32x4_t data = (int32x4_t)*(uint8x16_t*)&in_chunk->XAS_data[0][i*4];
+	for (int i = 0; i < 4; i++) {
 
-        for (int k = 0; k < 2; k++){
-            int32x4_t prediction = mul16_add32(samples, coefs);
-            int32x4_t correction = ((data << 24) & nibble_mask).SIMD_reinterpret_cast<int32x4_t>() >> shift;
+        int32x4_t data = *(int32x4_t*)&in_chunk->XAS_data[0][i*16];
 
-            int32x4_t predecode = (prediction + correction + rounding) >> fixed_point_offset;
+		data = PermuteByIndex(data, _shuffle).SIMD_reinterpret_cast<int32x4_t>();
 
-            int16x8_t decoded = Clip_int16(predecode);
+		int itrs = 4 - ((i + 1) >> 2); // i != 3 ? 4 : 3;
 
-            // _mm_shufflelo_epi16// also check _mm_mulhrs_epi16
-            // clip, mix
+		for (int j = 0; j < itrs; j++) {
+			for (int k = 0; k < 2; k++) {
+				int32x4_t prediction = mul16_add32(samples, coefs);
+				int32x4_t correction = (data & nibble_mask).SIMD_reinterpret_cast<int32x4_t>() >> shift;
 
-            samples = {(samples.SIMD_reinterpret_cast<uint32x4_t>() >> 16) | (((int32x4_t)(decoded.SIMD_reinterpret_cast<uint16x8_t>())) << 16) };
+				int32x4_t predecode = (prediction + correction + rounding) >> fixed_point_offset;
 
-            data = data << 4;
-        }
-        SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int*)(out_PCM + i*2 + 2), 16);
+				int16x8_t decoded = Clip_int16(predecode);
+
+				samples = { (samples.SIMD_reinterpret_cast<uint32x4_t>() >> 16) | (((int32x4_t)(decoded.SIMD_reinterpret_cast<uint16x8_t>())) << 16) };
+
+				data = data << 4;
+			}
+			SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int*)(out_PCM + i*8 + j*2 + 2), 16);
+		}
 	}
 #ifdef _DEBUG
 	int16_t PCM2[128];
@@ -203,6 +207,8 @@ void _cdecl Bench(uint32_t reps) {
 	PrintRes("SIMD", SIMD_time, reps);
 }
 #endif // BENCH
+
+#define decode_XAS_Chunk decode_XAS_Chunk_SIMD
 
 void decode_XAS(const void* in_data, int16_t* out_PCM, uint32_t n_samples_per_channel, uint32_t n_channels) {
 	if (n_samples_per_channel == 0)

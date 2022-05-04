@@ -150,7 +150,12 @@ inline void SaveWithStep_low_4(int16x8_t vect, int16_t* mem, int step) {
 	*mem = _mm_extract_epi16(vect.i128, 3);
 }
 
+inline vec128 PermuteByIndex(vec128 vect, vec128 index) {
+	return { _mm_shuffle_epi8(vect.i128, index.i128) };
+}
+
 #endif // __SSE2__
 
 
 #undef inline
+#undef _decl
