@@ -96,6 +96,23 @@ inline int32x4_t operator>>(int32x4_t a, int32x4_t shift) {
 	return { _mm_srav_epi32(a.i128, shift.i128) };
 }
 
+#else
+
+#define RA_SHIFT_ELEMENT(RES, VAL, SHIFT, NUM_EL) RES = _mm_insert_epi32(RES, _mm_extract_epi32(VAL, NUM_EL) >> _mm_extract_epi32(SHIFT, NUM_EL), NUM_EL)
+inline int32x4_t operator>>(int32x4_t a, int32x4_t shift) {
+	__m128i _val = a.i128;
+	__m128i _sh = shift.i128;
+	
+	__m128i res = _mm_cvtsi32_si128(_mm_cvtsi128_si32(_val) >> _mm_cvtsi128_si32(_sh));
+
+	RA_SHIFT_ELEMENT(res, _val, _sh, 1);
+	RA_SHIFT_ELEMENT(res, _val, _sh, 2);
+	RA_SHIFT_ELEMENT(res, _val, _sh, 3);
+
+	return { res };
+}
+#undef SHIFT_ELEMENT
+
 #endif
 
 inline int32x4_t operator+(int32x4_t a, int32x4_t b) {
@@ -127,8 +144,8 @@ inline int32x4_t LoadByIndex(int32x4_t indexes, const int* mem) {
 
 #else
 inline int32x4_t LoadByIndex(int32x4_t indexes, const int* mem) {
-    __m128i tmp = _mm_undefined_si128();
-    tmp = _mm_insert_epi32(tmp, mem[_mm_extract_epi32(indexes.i128, 0)], 0);
+    __m128i tmp;
+    tmp = _mm_cvtsi32_si128(mem[_mm_extract_epi32(indexes.i128, 0)]);
     tmp = _mm_insert_epi32(tmp, mem[_mm_extract_epi32(indexes.i128, 1)], 1);
     tmp = _mm_insert_epi32(tmp, mem[_mm_extract_epi32(indexes.i128, 2)], 2);
     tmp = _mm_insert_epi32(tmp, mem[_mm_extract_epi32(indexes.i128, 3)], 3);
