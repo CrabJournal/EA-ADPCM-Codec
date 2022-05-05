@@ -393,45 +393,6 @@ size_t encode_EA_XA_R2_chunk(byte data[sizeof_uncompr_EA_XA_R23_block], const in
  */
 
 
-float Sum(const float vals[], size_t count) {
-    float sum = 0;
-    for (size_t i = 0; i < count; i++) {
-        sum += vals[i];
-    }
-    return sum;
-}
-
-float Sum2(const float vals[], size_t count) {
-    float sum = 0;
-    for (size_t i = 0; i < count; i+=2) {
-        sum += vals[i];
-        sum += vals[i + 1];
-    }
-    return sum;
-}
-
-float Sum3(const float vals[], size_t count) {
-    float sum = 0, sum2 = 0;
-    for (size_t i = 0; i < count; i+=2) {
-        sum += vals[i];
-        sum2 += vals[i+1];
-    }
-    return sum + sum2;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
