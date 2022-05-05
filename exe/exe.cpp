@@ -186,8 +186,10 @@ void RunTheTest(const char* input_file, int repeat) {
 	static const char wav_file_name[] = "tmp.wav";
 
     WAV_meta wav_meta = ReadWAV(input_file, wav_header);
+    int n_chunks = (wav_meta.n_samples_per_channel + 27) / 28;
+
     int16_t* buf2 = (int16_t*)malloc(wav_header.subchunk2Size);
-    size_t encoded_size = GetXASEncodedSize(wav_meta.n_samples_per_channel, wav_header.numChannels);
+    size_t encoded_size = n_chunks*61;// GetXASEncodedSize(wav_meta.n_samples_per_channel, wav_header.numChannels);
     void* XAS = malloc(encoded_size);
 
     int nSamples = wav_header.subchunk2Size / 2;
@@ -195,12 +197,15 @@ void RunTheTest(const char* input_file, int repeat) {
     int nSamples_to_text = nSamples >  max_samples_to_text? max_samples_to_text : nSamples;
     PCM_to_text("orig.txt", wav_meta.PCM, nSamples_to_text, wav_header.numChannels);
 
+    size_t enc_real_size;
+
     int time_rep = 0;
     do {
-        encode_XAS(XAS, wav_meta.PCM, wav_meta.n_samples_per_channel, wav_header.numChannels);
-        decode_XAS(XAS, buf2, wav_meta.n_samples_per_channel, wav_header.numChannels);
+        enc_real_size = encode_EA_XA_R2(XAS, wav_meta.PCM, wav_meta.n_samples_per_channel, wav_header.numChannels);
+        decode_EA_XA_R2(XAS, buf2, wav_meta.n_samples_per_channel, wav_header.numChannels);
         std::swap(wav_meta.PCM, buf2);
     } while (++time_rep < repeat && memcmp(wav_meta.PCM, buf2, wav_header.subchunk2Size) != 0);
+    printf("orig size: %d, encoded size: %d bytes\n", wav_header.subchunk2Size, enc_real_size);
     PCM_to_text("prev.txt", buf2, nSamples_to_text, wav_header.numChannels);
 
     free(buf2);
@@ -209,7 +214,6 @@ void RunTheTest(const char* input_file, int repeat) {
     WriteWAV(wav_file_name, wav_header, wav_meta.PCM);
 
 	PCM_to_text("recoded.txt", wav_meta.PCM, nSamples_to_text, wav_header.numChannels);
-
 }
 
 int _main(int argc, char* argv[]) {

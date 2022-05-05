@@ -119,16 +119,22 @@ void decode_XAS_Chunk(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 	}
 }
 
+#ifdef __GNUC__
+#define ALIGN(ALGN) __attribute__((aligned (ALGN)))
+#else
+#define ALIGN(ALGN)
+#endif
+
 void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
-    vec128 head = *(vec128*)&in_chunk->headers;
-	static const table_type ea_adpcm_table_v3[][2] = {
+    vec128 head = LoadUnaligned(in_chunk->headers);
+	static const table_type ea_adpcm_table_v3[][2] ALIGN(16) = {
 		{(table_type)(0.000000*fixp_exponent), (table_type)(0.000000*fixp_exponent)},
 		{(table_type)(0.000000*fixp_exponent), (table_type)(0.937500*fixp_exponent)},
 		{(table_type)(-0.812500*fixp_exponent), (table_type)(1.796875*fixp_exponent)},
 		{(table_type)(-0.859375*fixp_exponent), (table_type)(1.531250*fixp_exponent)},
 	};
-	static const int32_t const_shift[4] = {16 - fixed_point_offset, 16 - fixed_point_offset , 16 - fixed_point_offset , 16 - fixed_point_offset };
-	static const uint8_t shuffle[16] = {12, 8, 4, 0,   13, 9, 5, 1,   14, 10, 6, 2,    15, 11, 7, 3};
+	static const int32_t const_shift[4] ALIGN(16) = {16 - fixed_point_offset, 16 - fixed_point_offset , 16 - fixed_point_offset , 16 - fixed_point_offset };
+	static const uint8_t shuffle[16] ALIGN(16) = {12, 8, 4, 0,   13, 9, 5, 1,   14, 10, 6, 2,    15, 11, 7, 3};
 
 	uint32x4_t rounding = { GetOnes128() };
 
@@ -151,7 +157,7 @@ void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 
 	for (int i = 0; i < 4; i++) {
 
-        int32x4_t data = *(int32x4_t*)&in_chunk->XAS_data[0][i*16];
+        int32x4_t data = LoadUnaligned(&in_chunk->XAS_data[0][i*16]).SIMD_reinterpret_cast<int32x4_t>();
 
 		data = PermuteByIndex(data, _shuffle).SIMD_reinterpret_cast<int32x4_t>();
 
@@ -189,7 +195,7 @@ void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 void PrintRes(const char* mes, uint64_t time, uint64_t reps) {
 	printf("%s: total = %llu, per chunk = %f \n", mes, time, (double)time / reps);
 }
-void _cdecl Bench(uint32_t reps) {
+void Bench(uint32_t reps) {
 	XAS_Chunk in_chunk;
 	int16_t PCM[128];
 	uint64_t start = __rdtsc();
@@ -406,11 +412,13 @@ size_t decode_EA_XA_R2_Chunk(const byte* XA_Chunk, int16_t out_PCM[28], int16_t 
 	return p_curr_byte - XA_Chunk;
 }
 
-EAADPCMCODEC_API
-void CODEC_ABI decode_EA_XA_R2(const byte* data, uint32_t num_chunks, int16_t *out_PCM) {
+void decode_EA_XA_R2(const void* data, int16_t *out_PCM, uint32_t n_samples_per_channel, uint32_t n_channels) {
+    // TODO: multi channel
+    byte *_data = (byte*)data;
 	int16_t prev_samples[3] = { 0 };
+    int num_chunks = (n_samples_per_channel + 27) / 28;
 	for (int i = 0; i < num_chunks; i++) {
-		size_t data_decoded_size = decode_EA_XA_R2_Chunk(data, out_PCM, prev_samples);
+		size_t data_decoded_size = decode_EA_XA_R2_Chunk(_data, out_PCM, prev_samples);
 #ifdef _DEBUG
 		if (data_decoded_size != sizeof_uncompr_EA_XA_R23_block
 			&& data_decoded_size != sizeof_compr_EA_XA_R23_block) {
@@ -418,28 +426,82 @@ void CODEC_ABI decode_EA_XA_R2(const byte* data, uint32_t num_chunks, int16_t *o
 			system("pause");
 		}
 #endif // _DEBUG
-		data += data_decoded_size;
+        _data += data_decoded_size;
 		out_PCM += samples_in_EA_XA_R_chunk;
 	}
 }
 
-void encode_EA_XA_R2_chunk_nocompr(byte data[sizeof_uncompr_EA_XA_R23_block], const int16_t PCM[28]) {
+void encode_EA_XA_R2_chunk_nocompr(byte data[sizeof_uncompr_EA_XA_R23_block], const int16_t PCM[28], int16_t prev[2], int nCannels) {
 	*data = 0xEE;
-	*(uint32_t*)(data + 1) = 0;
+    *(int16_t*)(data + 1) = _byteswap_ushort(PCM[26*nCannels]);
+    *(int16_t*)(data + 3) = _byteswap_ushort(PCM[27*nCannels]);
+    prev[0] = PCM[26*nCannels];
+    prev[1] = PCM[27*nCannels];
 	int16_t* pOutData = (int16_t*)(data + 5);
-	for (int i = 0; i < 28; i++) {
+	for (int i = 0; i < 28*nCannels; i+=nCannels) {
 		pOutData[i] = _byteswap_ushort(PCM[i]);
 	}
 }
 
-/*
-size_t encode_EA_XA_R2_chunk(byte data[sizeof_uncompr_EA_XA_R23_block], const int16_t PCM[28], int16_t max_error) {
-	// data
+void encode_EA_XA_block(byte data[], const int16_t PCM[], int16_t prev[2], int samples, int PCM_step, const table_type* coefs, byte shift, int data_step = 1){
+    for (int i = 0; i < samples/2; i++){
+        byte _data = 0;
+        for (int j = 0; j < 2; j++){
+            EncodedSample enc = encode_XA_sample(prev, coefs, PCM[(i*2 + j)*PCM_step], shift);
+            prev[0] = prev[1];
+            prev[1] = enc.decoded;
+            _data <<= 4;
+            _data |= enc.encoded;
+        }
+        *data = _data;
+        data += data_step;
+    }
 }
- */
 
+size_t encode_EA_XA_R2_chunk(byte data[sizeof_uncompr_EA_XA_R23_block], const int16_t PCM[28], int16_t prev[2], int nCannels, int16_t max_error) {
+    int coef_index;
+    byte shift;
+    int err = simple_CalcCoefShift(PCM, prev, 28, &coef_index, &shift);
+    if (err > max_error){
+        encode_EA_XA_R2_chunk_nocompr(data, PCM, prev, nCannels);
+        return sizeof_uncompr_EA_XA_R23_block;
+    }
+    else {
+        *data++ = coef_index << 4 | shift;
+        shift = 12 + fixed_point_offset - shift;
+        const table_type * coefs = ea_adpcm_table_v2[coef_index];
+        encode_EA_XA_block(data, PCM, prev, 28, nCannels, coefs, shift);
+        return sizeof_compr_EA_XA_R23_block;
+    }
+}
 
+void encode_EA_XA_R1_chunk(byte data[sizeof_EA_XA_R1_chunk], const int16_t PCM[28], const int16_t prev[2],  int nCannels) {
+    *(int16_t*)data = _byteswap_ushort(prev[0]);
+    *(int16_t*)(data + 2) = _byteswap_ushort(prev[1]); // ?
+    int coef_index;
+    byte shift;
+    simple_CalcCoefShift(PCM, prev, 28, &coef_index, &shift);
+    data[4] = coef_index << 4 | shift;
+    int16_t _prev[2]; memcpy(_prev, prev, 4);
+    encode_EA_XA_block(data + 5, PCM, _prev, 28, nCannels, ea_adpcm_table_v2[coef_index], 12 + fixed_point_offset - shift);
+}
 
+size_t encode_EA_XA_R2_channel(void* data, const int16_t PCM[], uint32_t n_samples_per_channel, uint32_t n_channels, int16_t max_error) {
+    int chunks_per_channel = (n_samples_per_channel + 27) / 28;
+    int16_t prev[2];
+    byte* curr_data = (byte*)data;
+    encode_EA_XA_R2_chunk_nocompr(curr_data, PCM, prev, (int)n_channels);
+    curr_data += sizeof_uncompr_EA_XA_R23_block;
+    for (int chunk_ind = 1; chunk_ind < chunks_per_channel; chunk_ind++){
+        curr_data += encode_EA_XA_R2_chunk(curr_data, PCM + 28*chunk_ind*n_channels, prev, n_channels, max_error);
+    }
+    return curr_data - (byte*)data;
+}
 
-
-
+size_t encode_EA_XA_R2(void* data, const int16_t PCM[], uint32_t n_samples_per_channel, uint32_t n_channels, int16_t max_error) {
+    byte* curr_data = (byte*)data;
+    for (int chan_ind = 0; chan_ind < n_channels; chan_ind++){
+        curr_data += encode_EA_XA_R2_channel(curr_data, PCM + chan_ind, n_samples_per_channel, n_channels, max_error);
+    }
+    return curr_data - (byte*)data;
+}

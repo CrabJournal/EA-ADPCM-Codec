@@ -41,7 +41,8 @@ const int samples_in_XAS_header = 2;
 const int samples_in_XAS_per_subchunk = samples_in_XAS_subchunk + samples_in_XAS_header; // but not IN subchunk
 
 const int samples_in_EA_XA_R_chunk = 28;
-const int sizeof_uncompr_EA_XA_R23_block = 1 + (samples_in_EA_XA_R_chunk + 2) * sizeof(short);
+const int sizeof_EA_XA_R1_chunk = 1 + 2*sizeof(int16_t) + samples_in_EA_XA_R_chunk / 2;
+const int sizeof_uncompr_EA_XA_R23_block = 1 + (samples_in_EA_XA_R_chunk + 2) * sizeof(int16_t);
 const int sizeof_compr_EA_XA_R23_block = 1 + samples_in_EA_XA_R_chunk / 2;
 
 #pragma pack(push, 1)

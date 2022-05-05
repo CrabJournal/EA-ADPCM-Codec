@@ -1,5 +1,13 @@
 #pragma once
 
+#ifdef _MSC_VER
+#define inline __forceinline
+#define _decl _vectorcall
+#else
+#define _decl
+#endif
+
+
 #ifndef __SSE2__
 
 #if (_M_IX86_FP >= 2) || defined(_M_X64) || defined(_M_AMD64)
@@ -22,15 +30,8 @@
 struct vec128;
 inline vec128 GetOnes128();
 
-#define _decl _vectorcall
-
-#define inline __forceinline
 
 struct vec128 {
-    static vec128 GetZeros128() {
-        return { _mm_setzero_si128() };
-    }
-
     template <typename T>
     inline T _decl SIMD_reinterpret_cast(){
         return { i128 };
@@ -51,6 +52,10 @@ struct vec128 {
 public:
     __m128i i128;
 };
+
+inline vec128 LoadUnaligned(const void* ptr){
+    return {_mm_loadu_si128((__m128i*)ptr)};
+}
 
 inline vec128 GetOnes128() {
     __m128i undef = _mm_undefined_si128();
