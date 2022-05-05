@@ -102,6 +102,7 @@ size_t ReadWholeFile(const char* file_name, void* &data) {
     data = malloc(file_size);
     fread(data, file_size, 1, f);
     fclose(f);
+	return file_size;
 }
 void WriteFile(const char* file_name, const void* data, size_t data_size) {
     FILE* f = fopen(file_name, "w+b");
@@ -276,8 +277,14 @@ int main() {
 		"",
 		"test",
 		"FE_MB_or_29.wav",
-        "10000"
+        "1"
 	};
+
+#ifdef BENCH
+	Bench(1000);
+	return 0;
+#endif // BENCH
+
 
     // out_f = fopen("p-c-out.txt", "w");
 

@@ -1,11 +1,11 @@
 #include "limits.h"
 
+#include "vector_SIMD.h"
 
 #include "EA ADPCM codec.h"
 #include "EA_ADPCM_DLL.h"
 
 #include <cassert>
-#include "vector_SIMD.h"
 
 #ifdef _DEBUG
 #include <iostream>
@@ -17,8 +17,6 @@
 	EA-XAS: presents in all known decoders (ffmpeg, NFS_abk_decoder(Carbon+))
 */
 const int def_rounding = (fixp_exponent >> 1);
-
-
 
 inline int16_t decode_XA_sample(const int16_t prev_samples[2], const table_type coef[2], char int4, byte shift) {
 	int correction = (int)int4 << shift;
@@ -36,7 +34,7 @@ inline EncodedSample encode_XA_sample(const int16_t prev_samples[2], const table
 
 	int correction = (sample << fixed_point_offset) - prediction;
 
-#ifdef _DEBUG
+#ifdef _DEBUG__
     int shifted = correction >> shift;
 				const int tr = 8;
 				if (shifted > tr || shifted < -(tr + 1)) {
@@ -86,7 +84,7 @@ uint32_t GetXASEncodedSize(uint32_t n_samples_per_channel, uint32_t n_channels) 
 	return GetNumXASTotalChunks(n_samples_per_channel, n_channels)*sizeof(XAS_Chunk);
 }
 
-void decode_XAS_Chunk_(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
+void decode_XAS_Chunk(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 	for (int j = 0; j < subchunks_in_XAS_chunk; j++) {
 		int16_t *pSamples = out_PCM + j * 32;
 
@@ -121,13 +119,21 @@ void decode_XAS_Chunk_(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 	}
 }
 
-void decode_XAS_Chunk(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
+void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
     vec128 head = *(vec128*)&in_chunk->headers;
-	static const int32_t const_shift[4] = { 12 + fixed_point_offset, 12 + fixed_point_offset , 12 + fixed_point_offset , 12 + fixed_point_offset };
+	static const table_type ea_adpcm_table_v3[][2] = {
+		{(table_type)(0.000000*fixp_exponent), (table_type)(0.000000*fixp_exponent)},
+		{(table_type)(0.000000*fixp_exponent), (table_type)(0.937500*fixp_exponent)},
+		{(table_type)(-0.812500*fixp_exponent), (table_type)(1.796875*fixp_exponent)},
+		{(table_type)(-0.859375*fixp_exponent), (table_type)(1.531250*fixp_exponent)},
+	};
+	static const int32_t const_shift[4] = {16 - fixed_point_offset, 16 - fixed_point_offset , 16 - fixed_point_offset , 16 - fixed_point_offset };
+	static const uint8_t shuffle[16] = {12, 8, 4, 0,   13, 9, 5, 1,   14, 10, 6, 2,    15, 11, 7, 3};
 
 	uint32x4_t rounding = { GetOnes128() };
 
-	uint32x4_t nibble_mask = rounding.SIMD_reinterpret_cast<uint32x4_t>() >> 28;
+	uint32x4_t coef_mask = rounding >> 30;
+	int32x4_t nibble_mask = rounding << 28;
 
 	rounding = (rounding >> 31 << (fixed_point_offset - 1)).SIMD_reinterpret_cast<uint32x4_t>();
 
@@ -135,34 +141,74 @@ void decode_XAS_Chunk(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 	samples = samples >> 4 << 4;
 
 	int32x4_t shift = { head };
-	shift = *(int32x4_t*)const_shift - (shift << 12 >> 28);
-	int32x4_t coef_index = { head & nibble_mask };
-	int16x8_t coefs = LoadByIndex(coef_index, (int *) ea_adpcm_table_v2).SIMD_reinterpret_cast<int16x8_t>();
+	shift = *(int32x4_t*)const_shift + ((shift << 12).SIMD_reinterpret_cast<uint32x4_t>() >> 28);
+	int32x4_t coef_index = { head & coef_mask };
+	int16x8_t coefs = LoadByIndex(coef_index, (int*) ea_adpcm_table_v3).SIMD_reinterpret_cast<int16x8_t>();
 
     SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int32_t*)out_PCM, 16);
 
-	for (int i = 0; i < 15; i++) {
+	vec128 _shuffle = *(vec128*)shuffle;
 
-        int32x4_t data = (int32x4_t)*(uint8x16_t*)&in_chunk->XAS_data[0][i*4];
+	for (int i = 0; i < 4; i++) {
 
-        for (int k = 0; k < 2; k++){
-            int32x4_t prediction = mul16_add32(samples, coefs);
-            int32x4_t correction = (data & nibble_mask).SIMD_reinterpret_cast<int32x4_t>() << shift;
+        int32x4_t data = *(int32x4_t*)&in_chunk->XAS_data[0][i*16];
 
-            int32x4_t predecode = (prediction + correction + rounding) >> fixed_point_offset;
+		data = PermuteByIndex(data, _shuffle).SIMD_reinterpret_cast<int32x4_t>();
 
-            int16x8_t decoded = Clip_int16(predecode);
+		int itrs = 4 - ((i + 1) >> 2); // i != 3 ? 4 : 3;
 
-            // _mm_shufflelo_epi16// also check _mm_mulhrs_epi16
-            // clip, mix
+		for (int j = 0; j < itrs; j++) {
+			for (int k = 0; k < 2; k++) {
+				int32x4_t prediction = mul16_add32(samples, coefs);
+				int32x4_t correction = (data & nibble_mask).SIMD_reinterpret_cast<int32x4_t>() >> shift;
 
-            samples = {(samples.SIMD_reinterpret_cast<int32x4_t>() >> 16) | (int32x4_t)decoded.SIMD_reinterpret_cast<uint16x8_t>() };
+				int32x4_t predecode = (prediction + correction + rounding) >> fixed_point_offset;
 
-            data = data >> 4;
-        }
-        SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int*)(out_PCM + i*2), 16);
+				int16x8_t decoded = Clip_int16(predecode);
+
+				samples = { (samples.SIMD_reinterpret_cast<uint32x4_t>() >> 16) | (((int32x4_t)(decoded.SIMD_reinterpret_cast<uint16x8_t>())) << 16) };
+
+				data = data << 4;
+			}
+			SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int*)(out_PCM + i*8 + j*2 + 2), 16);
+		}
 	}
+#ifdef _DEBUG
+	int16_t PCM2[128];
+	decode_XAS_Chunk(in_chunk, PCM2);
+	if (memcmp(PCM2, out_PCM, 128 * 2) == 0) {
+		printf("ok \n");
+	}
+	else {
+		printf("not ok \n");
+	}
+#endif // _DEBUG
 }
+
+#ifdef BENCH
+void PrintRes(const char* mes, uint64_t time, uint64_t reps) {
+	printf("%s: total = %llu, per chunk = %f \n", mes, time, (double)time / reps);
+}
+void _cdecl Bench(uint32_t reps) {
+	XAS_Chunk in_chunk;
+	int16_t PCM[128];
+	uint64_t start = __rdtsc();
+	for (uint64_t i = 0; i < reps; i++) {
+		decode_XAS_Chunk(&in_chunk, PCM);
+	}
+	uint64_t SISD_time = __rdtsc() - start;
+	start = __rdtsc();
+	for (uint64_t i = 0; i < reps; i++) {
+		decode_XAS_Chunk_SIMD(&in_chunk, PCM);
+	}
+	uint64_t SIMD_time = __rdtsc() - start;
+
+	PrintRes("SISD", SISD_time, reps);
+	PrintRes("SIMD", SIMD_time, reps);
+}
+#endif // BENCH
+
+#define decode_XAS_Chunk decode_XAS_Chunk_SIMD
 
 void decode_XAS(const void* in_data, int16_t* out_PCM, uint32_t n_samples_per_channel, uint32_t n_channels) {
 	if (n_samples_per_channel == 0)
