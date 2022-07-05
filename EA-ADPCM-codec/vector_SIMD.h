@@ -8,6 +8,8 @@
 #endif
 
 
+#include "stdint.h"
+
 #ifndef __SSE2__
 
 #if (_M_IX86_FP >= 2) || defined(_M_X64) || defined(_M_AMD64)
@@ -15,8 +17,6 @@
 #endif
 
 #endif // !__SSE2__
-
-#include "stdint.h"
 
 #ifdef __SSE2__
 
@@ -66,45 +66,45 @@ inline vec128 GetZeros128(){
     return { _mm_setzero_si128() };
 }
 
-struct uint32x4_t;
+struct uint32x4;
 
-struct int32x4_t : vec128 {};
-struct uint32x4_t : int32x4_t {};
-struct int16x8_t : vec128 {};
-struct uint16x8_t : vec128 {
-    inline _decl operator int32x4_t() const { return {_mm_cvtepu16_epi32(i128)}; }
+struct int32x4 : vec128 {};
+struct uint32x4 : int32x4 {};
+struct int16x8 : vec128 {};
+struct uint16x8 : vec128 {
+    inline _decl operator int32x4() const { return {_mm_cvtepu16_epi32(i128)}; }
 };
 struct uint8x16_t : vec128 {
-    inline _decl operator int32x4_t () const { return {_mm_cvtepu8_epi32(i128)}; }
+    inline _decl operator int32x4 () const { return {_mm_cvtepu8_epi32(i128)}; }
 };
 
-inline int16x8_t operator<<(int16x8_t a, const int shift_imm8) {
+inline int16x8 operator<<(int16x8 a, const int shift_imm8) {
 	return { _mm_slli_epi16(a.i128, shift_imm8) };
 }
-inline int32x4_t operator<<(int32x4_t a, const int shift_imm8) {
+inline int32x4 operator<<(int32x4 a, const int shift_imm8) {
 	return { _mm_slli_epi32(a.i128, shift_imm8) };
 }
 
-inline int16x8_t operator>>(int16x8_t a, const int shift_imm8) {
+inline int16x8 operator>>(int16x8 a, const int shift_imm8) {
 	return { _mm_srli_epi16(a.i128, shift_imm8) };
 }
-inline int32x4_t operator>>(int32x4_t a, const int shift_imm8) {
+inline int32x4 operator>>(int32x4 a, const int shift_imm8) {
 	return { _mm_srai_epi32(a.i128, shift_imm8) };
 }
-inline uint32x4_t operator>>(uint32x4_t a, const int shift_imm8) {
+inline uint32x4 operator>>(uint32x4 a, const int shift_imm8) {
     return { _mm_srli_epi32(a.i128, shift_imm8) };
 }
 
 #ifdef __AVX2__
 
-inline int32x4_t operator>>(int32x4_t a, int32x4_t shift) {
+inline int32x4 operator>>(int32x4 a, int32x4 shift) {
 	return { _mm_srav_epi32(a.i128, shift.i128) };
 }
 
 #else
 
 #define RA_SHIFT_ELEMENT(RES, VAL, SHIFT, NUM_EL) RES = _mm_insert_epi32(RES, _mm_extract_epi32(VAL, NUM_EL) >> _mm_extract_epi32(SHIFT, NUM_EL), NUM_EL)
-inline int32x4_t operator>>(int32x4_t a, int32x4_t shift) {
+inline int32x4 operator>>(int32x4 a, int32x4 shift) {
 	__m128i _val = a.i128;
 	__m128i _sh = shift.i128;
 	
@@ -120,35 +120,35 @@ inline int32x4_t operator>>(int32x4_t a, int32x4_t shift) {
 
 #endif
 
-inline int32x4_t operator+(int32x4_t a, int32x4_t b) {
+inline int32x4 operator+(int32x4 a, int32x4 b) {
 	return { _mm_add_epi32(a.i128, b.i128) };
 }
-inline int16x8_t operator+(int16x8_t a, int16x8_t b) {
+inline int16x8 operator+(int16x8 a, int16x8 b) {
 	return { _mm_add_epi16(a.i128, b.i128) };
 }
-inline int32x4_t operator-(int32x4_t a, int32x4_t b) {
+inline int32x4 operator-(int32x4 a, int32x4 b) {
 	return { _mm_sub_epi32(a.i128, b.i128) };
 }
-inline int16x8_t operator-(int16x8_t a, int16x8_t b) {
+inline int16x8 operator-(int16x8 a, int16x8 b) {
 	return { _mm_sub_epi16(a.i128, b.i128) };
 }
 
-inline int32x4_t mul16_add32(int16x8_t a, int16x8_t b) {
+inline int32x4 mul16_add32(int16x8 a, int16x8 b) {
 	return { _mm_madd_epi16(a.i128, b.i128) };
 }
 
-inline int16x8_t Clip_int16(int32x4_t a) {
+inline int16x8 Clip_int16(int32x4 a) {
 	return {  _mm_packs_epi32(a.i128, a.i128)  };
 }
 
 #ifdef __AVX__
 
-inline int32x4_t LoadByIndex(int32x4_t indexes, const int* mem) {
+inline int32x4 LoadByIndex(int32x4 indexes, const int* mem) {
     return { _mm_castps_si128(_mm_permutevar_ps(*(__m128*)mem, indexes.i128)) };
 }
 
 #else
-inline int32x4_t LoadByIndex(int32x4_t indexes, const int* mem) {
+inline int32x4 LoadByIndex(int32x4 indexes, const int* mem) {
     __m128i tmp;
     tmp = _mm_cvtsi32_si128(mem[_mm_extract_epi32(indexes.i128, 0)]);
     tmp = _mm_insert_epi32(tmp, mem[_mm_extract_epi32(indexes.i128, 1)], 1);
@@ -158,14 +158,14 @@ inline int32x4_t LoadByIndex(int32x4_t indexes, const int* mem) {
 }
 #endif // __AVX__
 
-inline void SaveWithStep(int32x4_t vect, int32_t * mem, int step) {
+inline void SaveWithStep(int32x4 vect, int32_t * mem, int step) {
     mem[0]      = _mm_extract_epi32(vect.i128, 0);
     mem[step]   = _mm_extract_epi32(vect.i128, 1);
     mem[step*2] = _mm_extract_epi32(vect.i128, 2);
     mem[step*3] = _mm_extract_epi32(vect.i128, 3);
 }
 
-inline void SaveWithStep_low_4(int16x8_t vect, int16_t* mem, int step) {
+inline void SaveWithStep_low_4(int16x8 vect, int16_t* mem, int step) {
     *mem = _mm_extract_epi16(vect.i128, 0), mem += step;
 	*mem = _mm_extract_epi16(vect.i128, 1), mem += step;
 	*mem = _mm_extract_epi16(vect.i128, 2), mem += step;
@@ -181,3 +181,72 @@ inline vec128 PermuteByIndex(vec128 vect, vec128 index) {
 
 #undef inline
 #undef _decl
+
+
+#ifdef __ARM_NEON
+
+#include <arm_neon.h>
+
+struct vec128;
+
+// could not overload typedef'ed :(
+struct vec128 {
+    template <typename T>
+    inline T SIMD_reinterpret_cast(){
+        return { i128 };
+    }
+    inline vec128 operator&(vec128 b) {
+        return { vandq_s8(i128, b.i128) };
+    }
+    inline vec128 operator|(vec128 b) {
+        return { vorrq_s8(i128, b.i128) };
+    }
+    inline vec128 operator^(vec128 b) {
+        return { veorq_s8(i128, b.i128) };
+    }
+    inline vec128 operator~() {
+        return { vmvnq_s8(i128) };
+    }
+public:
+    int8x16_t i128;
+};
+struct int16x8 : vec128 { };
+struct int32x4 : vec128 { };
+struct uint32x4 : int32x4 { };
+
+vec128
+
+inline int16x8 operator<<(int16x8 a, const int shift_imm8) {
+	return { vshlq_n_s16( vreinterpretq_s16_s8(a.i128), shift_imm8) };
+}
+inline int32x4 operator<<(int32x4 a, const int shift_imm8) {
+	return { vshlq_n_s32( vreinterpretq_s32_s8(a.i128), shift_imm8) };
+}
+inline int16x8 operator>>(int16x8 a, const int shift_imm8) {
+	return { vshrq_n_s16( vreinterpretq_s16_s8(a.i128), shift_imm8) };
+}
+inline int32x4 operator>>(int32x4 a, const int shift_imm8) {
+	return { vshrq_n_s32( vreinterpretq_s32_s8(a.i128), shift_imm8) };
+}
+inline uint32x4 operator>>(uint32x4 a, const int shift_imm8) {    return { vshrq_n_u32( vreinterpretq_u32_s8(a.i128), shift_imm8) };
+}
+inline int32x4 operator>>(int32x4 a, int32x4 shift) {
+	return { vshlq_s32( vreinterpretq_s16_s8(a.i128), vnegq_s32( vreinterpretq_s32_s8(shift.i128) )) }; // neg shift and make sihned shift left then
+}
+inline int32x4 operator+(int32x4 a, int32x4 b) {
+	return { vaddq_s32(a.i128, b.i128) }; // neg shift and make sihned shift left then
+}
+
+
+inline void SaveWithStep(int32x4 vect, int32_t * mem, int step) {
+    mem[0]      = _mm_extract_epi32(vect.i128, 0);
+    mem[step]   = _mm_extract_epi32(vect.i128, 1);
+    mem[step*2] = _mm_extract_epi32(vect.i128, 2);
+    mem[step*3] = _mm_extract_epi32(vect.i128, 3);
+}
+
+LoadUnaligned(){
+
+}
+
+#endif

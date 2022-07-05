@@ -24,12 +24,21 @@ const table_type ea_adpcm_table_v2[][2] = {
 
 
 #ifdef __GNUC__
+
+#if defined(_M_AMD64) || defined(__i386__)
 #include <x86intrin.h>
-#define _byteswap_ushort __builtin_bswap16
+#define ToBigEndian16 __builtin_bswap16
+#else
+#include <netinet/in.h>
+inline int16_t ToBigEndian16(int16_t val){
+	return htons(val); // is it fast enough?
+}
+#endif
+
 #else
 
 #ifndef _MSC_VER
-#define _byteswap_ushort(VAL) (uint16_t)( VAL >> 8 | VAL << 8)
+#define ToBigEndian16 _byteswap_ushort
 #endif // !_MSC_VER
 
 
@@ -92,7 +101,7 @@ struct XAS_Chunk {
 
 
 inline int16_t Get_s16be(const void* ptr) {
-	return (short)_byteswap_ushort(*(unsigned short*)ptr);
+	return (short)ToBigEndian16(*(unsigned short*)ptr);
 }
 inline int16_t bytestream2_get_le16s(byte** ptr) {
 	short val = **(short**)ptr;

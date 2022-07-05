@@ -3,10 +3,11 @@
 .cache/
 .idea/
 
-# results
+# results etc
 *.wav
 *.raw
 *.dat
+*.layout
 *.txt
 !CMakeLists.txt
 !legacy.txt
@@ -16,3 +17,4 @@ Debug/
 Release/
 x64/
 cmake-build-*/
+build/

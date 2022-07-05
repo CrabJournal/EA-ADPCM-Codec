@@ -69,7 +69,7 @@ inline EncodedSample encode_XA_sample(const int16_t prev_samples[2], const table
         }
     }
     // ----
-
+	
 	return { (int16_t)decoded, (char)res};
 }
 
@@ -126,6 +126,7 @@ void decode_XAS_Chunk(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 #endif
 
 void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
+	
     vec128 head = LoadUnaligned(in_chunk->headers);
 	static const table_type ea_adpcm_table_v3[][2] ALIGN(16) = {
 		{(table_type)(0.000000*fixp_exponent), (table_type)(0.000000*fixp_exponent)},
@@ -136,47 +137,47 @@ void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 	static const int32_t const_shift[4] ALIGN(16) = {16 - fixed_point_offset, 16 - fixed_point_offset , 16 - fixed_point_offset , 16 - fixed_point_offset };
 	static const uint8_t shuffle[16] ALIGN(16) = {12, 8, 4, 0,   13, 9, 5, 1,   14, 10, 6, 2,    15, 11, 7, 3};
 
-	uint32x4_t rounding = { GetOnes128() };
+	uint32x4 rounding = { GetOnes128() };
 
-	uint32x4_t coef_mask = rounding >> 30;
-	int32x4_t nibble_mask = rounding << 28;
+	uint32x4 coef_mask = rounding >> 30;
+	int32x4 nibble_mask = rounding << 28;
 
-	rounding = (rounding >> 31 << (fixed_point_offset - 1)).SIMD_reinterpret_cast<uint32x4_t>();
+	rounding = (rounding >> 31 << (fixed_point_offset - 1)).SIMD_reinterpret_cast<uint32x4>();
 
-	int16x8_t samples = head.SIMD_reinterpret_cast<int16x8_t>();
+	int16x8 samples = head.SIMD_reinterpret_cast<int16x8>();
 	samples = samples >> 4 << 4;
 
-	int32x4_t shift = { head };
-	shift = *(int32x4_t*)const_shift + ((shift << 12).SIMD_reinterpret_cast<uint32x4_t>() >> 28);
-	int32x4_t coef_index = { head & coef_mask };
-	int16x8_t coefs = LoadByIndex(coef_index, (int*) ea_adpcm_table_v3).SIMD_reinterpret_cast<int16x8_t>();
+	int32x4 shift = { head };
+	shift = *(int32x4*)const_shift + ((shift << 12).SIMD_reinterpret_cast<uint32x4>() >> 28);
+	int32x4 coef_index = { head & coef_mask };
+	int16x8 coefs = LoadByIndex(coef_index, (int*) ea_adpcm_table_v3).SIMD_reinterpret_cast<int16x8>();
 
-    SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int32_t*)out_PCM, 16);
+    SaveWithStep(samples.SIMD_reinterpret_cast<int32x4>(), (int32_t*)out_PCM, 16);
 
 	vec128 _shuffle = *(vec128*)shuffle;
 
 	for (int i = 0; i < 4; i++) {
 
-        int32x4_t data = LoadUnaligned(&in_chunk->XAS_data[0][i*16]).SIMD_reinterpret_cast<int32x4_t>();
+        int32x4 data = LoadUnaligned(&in_chunk->XAS_data[0][i*16]).SIMD_reinterpret_cast<int32x4>();
 
-		data = PermuteByIndex(data, _shuffle).SIMD_reinterpret_cast<int32x4_t>();
+		data = PermuteByIndex(data, _shuffle).SIMD_reinterpret_cast<int32x4>();
 
 		int itrs = 4 - ((i + 1) >> 2); // i != 3 ? 4 : 3;
 
 		for (int j = 0; j < itrs; j++) {
 			for (int k = 0; k < 2; k++) {
-				int32x4_t prediction = mul16_add32(samples, coefs);
-				int32x4_t correction = (data & nibble_mask).SIMD_reinterpret_cast<int32x4_t>() >> shift;
+				int32x4 prediction = mul16_add32(samples, coefs);
+				int32x4 correction = (data & nibble_mask).SIMD_reinterpret_cast<int32x4>() >> shift;
 
-				int32x4_t predecode = (prediction + correction + rounding) >> fixed_point_offset;
+				int32x4 predecode = (prediction + correction + rounding) >> fixed_point_offset;
 
-				int16x8_t decoded = Clip_int16(predecode);
+				int16x8 decoded = Clip_int16(predecode);
 
-				samples = { (samples.SIMD_reinterpret_cast<uint32x4_t>() >> 16) | (((int32x4_t)(decoded.SIMD_reinterpret_cast<uint16x8_t>())) << 16) };
+				samples = { (samples.SIMD_reinterpret_cast<uint32x4>() >> 16) | (((int32x4)(decoded.SIMD_reinterpret_cast<uint16x8>())) << 16) };
 
 				data = data << 4;
 			}
-			SaveWithStep(samples.SIMD_reinterpret_cast<int32x4_t>(), (int*)(out_PCM + i*8 + j*2 + 2), 16);
+			SaveWithStep(samples.SIMD_reinterpret_cast<int32x4>(), (int*)(out_PCM + i*8 + j*2 + 2), 16);
 		}
 	}
 #ifdef _DEBUG
@@ -189,6 +190,7 @@ void decode_XAS_Chunk_SIMD(const XAS_Chunk* in_chunk, int16_t* out_PCM) {
 		printf("not ok \n");
 	}
 #endif // _DEBUG
+
 }
 
 #ifdef BENCH
@@ -433,13 +435,13 @@ void decode_EA_XA_R2(const void* data, int16_t *out_PCM, uint32_t n_samples_per_
 
 void encode_EA_XA_R2_chunk_nocompr(byte data[sizeof_uncompr_EA_XA_R23_block], const int16_t PCM[28], int16_t prev[2], int nCannels) {
 	*data = 0xEE;
-    *(int16_t*)(data + 1) = _byteswap_ushort(PCM[26*nCannels]);
-    *(int16_t*)(data + 3) = _byteswap_ushort(PCM[27*nCannels]);
+    *(int16_t*)(data + 1) = ToBigEndian16(PCM[26*nCannels]);
+    *(int16_t*)(data + 3) = ToBigEndian16(PCM[27*nCannels]);
     prev[0] = PCM[26*nCannels];
     prev[1] = PCM[27*nCannels];
 	int16_t* pOutData = (int16_t*)(data + 5);
 	for (int i = 0; i < 28*nCannels; i+=nCannels) {
-		pOutData[i] = _byteswap_ushort(PCM[i]);
+		pOutData[i] = ToBigEndian16(PCM[i]);
 	}
 }
 
@@ -476,8 +478,8 @@ size_t encode_EA_XA_R2_chunk(byte data[sizeof_uncompr_EA_XA_R23_block], const in
 }
 
 void encode_EA_XA_R1_chunk(byte data[sizeof_EA_XA_R1_chunk], const int16_t PCM[28], const int16_t prev[2],  int nCannels) {
-    *(int16_t*)data = _byteswap_ushort(prev[0]);
-    *(int16_t*)(data + 2) = _byteswap_ushort(prev[1]); // ?
+    *(int16_t*)data = ToBigEndian16(prev[0]);
+    *(int16_t*)(data + 2) = ToBigEndian16(prev[1]); // ?
     int coef_index;
     byte shift;
     simple_CalcCoefShift(PCM, prev, 28, &coef_index, &shift);
